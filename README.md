@@ -1,4 +1,4 @@
-> **Você está na branch `sprint-3`.** Ela está congelada no estado em
+> **Você está na branch `sprint-4`.** Ela está congelada no estado em
 > que o projeto deveria estar ao final daquela sprint: aqui existe só o
 > que já tinha sido feito até ali. O estado final do projeto está na
 > branch `main`.

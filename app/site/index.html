@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>BiblioTroca — livros do bairro</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 760px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.5;
+      color: #1f2433;
+    }
+    h1 { margin-bottom: 4px; }
+    .sub { color: #5b6773; margin-top: 0; }
+    fieldset { border: 1px solid #ccc; margin-bottom: 24px;
+               min-width: 0; }
+    label { display: block; margin-top: 12px; }
+    input, select { width: 100%; padding: 6px; box-sizing: border-box; }
+    button { margin-top: 16px; padding: 8px 16px; }
+    table { width: 100%; border-collapse: collapse;
+            table-layout: fixed; }
+    th, td { border-bottom: 1px solid #ddd; padding: 6px;
+             text-align: left; word-break: break-word; }
+    .aviso { color: #a00; }
+    .ok { color: #1e7b4d; }
+    .nota { color: #5b6773; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>BiblioTroca</h1>
+  <p class="sub">Livros que moradores do bairro disponibilizam para
+     troca.</p>
+
+  <fieldset>
+    <legend>Disponibilizar um livro</legend>
+    <label>Bairro <input id="bairro" value="Tijuca"></label>
+    <label>Título <input id="titulo"></label>
+    <label>Autor <input id="autor"></label>
+    <label>Estado de conservação
+      <select id="estado">
+        <option value="novo">novo</option>
+        <option value="bom" selected>bom</option>
+        <option value="gasto">gasto</option>
+      </select>
+    </label>
+    <label>Foto da capa
+      <input id="capa" type="file" accept="image/jpeg,image/png">
+    </label>
+    <p class="nota">A foto é da capa do livro, não do dono. Imagens com
+       pessoas identificáveis não devem ser enviadas (RD-02).</p>
+    <button id="gravar">Disponibilizar</button>
+    <p id="retorno"></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Livros disponíveis no bairro</legend>
+    <button id="consultar">Consultar</button>
+    <p id="resumo"></p>
+    <table>
+      <thead>
+        <tr><th>Título</th><th>Autor</th><th>Estado</th>
+            <th>Disponível desde</th><th></th></tr>
+      </thead>
+      <tbody id="corpo"></tbody>
+    </table>
+  </fieldset>
+
+  <script src="config.js"></script>
+  <script>
+    const campo = (id) => document.getElementById(id);
+
+    function dataHora(iso) {
+      const d = new Date(iso);
+      if (isNaN(d)) { return iso; }
+      return d.toLocaleString("pt-BR", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit"
+      });
+    }
+
+    // o arquivo vira base64 para viajar dentro do JSON do POST
+    function lerCapa() {
+      const arquivo = campo("capa").files[0];
+      if (!arquivo) { return Promise.resolve(null); }
+      return new Promise((ok, falha) => {
+        const leitor = new FileReader();
+        leitor.onload = () => ok(leitor.result.split(",")[1]);
+        leitor.onerror = () => falha(leitor.error);
+        leitor.readAsDataURL(arquivo);
+      });
+    }
+
+    async function gravar() {
+      const corpo = {
+        bairro: campo("bairro").value,
+        titulo: campo("titulo").value,
+        autor: campo("autor").value,
+        estado: campo("estado").value
+      };
+      const capa = await lerCapa();
+      if (capa) { corpo.capa_base64 = capa; }
+
+      const r = await fetch(URL_API + "/livros", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(corpo)
+      });
+      const dados = await r.json();
+      campo("retorno").textContent =
+        r.status === 201
+          ? "livro disponibilizado: " + dados.id_livro
+          : "erro: " + (dados.erro || r.status);
+      campo("retorno").className = r.status === 201 ? "ok" : "aviso";
+      if (r.status === 201) { consultar(); }
+    }
+
+    async function consultar() {
+      const alvo = URL_API + "/livros?bairro="
+        + encodeURIComponent(campo("bairro").value);
+      const r = await fetch(alvo);
+      const dados = await r.json();
+      const corpo = campo("corpo");
+      corpo.innerHTML = "";
+      if (r.status !== 200) {
+        campo("resumo").textContent = "erro: " + dados.erro;
+        campo("resumo").className = "aviso";
+        return;
+      }
+      campo("resumo").className = "";
+      campo("resumo").textContent =
+        dados.total === 0
+          ? "nenhum livro disponível neste bairro"
+          : dados.total + " livro(s) disponível(is)";
+      for (const item of dados.itens) {
+        const linha = corpo.insertRow();
+        linha.insertCell().textContent = item.titulo;
+        linha.insertCell().textContent = item.autor;
+        linha.insertCell().textContent = item.estado;
+        linha.insertCell().textContent = dataHora(item.criado_em);
+        const botao = document.createElement("button");
+        botao.textContent = "troquei";
+        botao.style.margin = "0";
+        botao.addEventListener("click", () => marcar(item.id_livro));
+        linha.insertCell().appendChild(botao);
+      }
+    }
+
+    // RF-04: o dono informa que a troca ocorreu
+    async function marcar(idLivro) {
+      const r = await fetch(URL_API + "/livros/trocado", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          bairro: campo("bairro").value,
+          id_livro: idLivro
+        })
+      });
+      const dados = await r.json();
+      campo("resumo").textContent = r.status === 200
+        ? "livro marcado como trocado"
+        : "erro: " + (dados.erro || r.status);
+      if (r.status === 200) { consultar(); }
+    }
+
+    campo("gravar").addEventListener("click", gravar);
+    campo("consultar").addEventListener("click", consultar);
+  </script>
+</body>
+</html>
