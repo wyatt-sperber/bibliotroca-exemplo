@@ -1,0 +1,24 @@
+# credenciais e segredos
+.env
+*.pem
+*.key
+
+# artefatos
+*.zip
+volume/
+
+# ambiente
+.venv/
+__pycache__/
+node_modules/
+
+# sistema
+.DS_Store
+Thumbs.db
+
+# gerados pelo deploy, nao versionados
+infra/.id-api
+infra/.url-api
+infra/openapi-pronto.yaml
+app/site/config.js
+testes/tempos.txt
